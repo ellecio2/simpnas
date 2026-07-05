@@ -94,24 +94,47 @@ if (isset($_POST['setup_volume'])) {
 
         exec("mdadm --detail --scan | tee -a /etc/mdadm/mdadm.conf");
 
-    } elseif ($num_of_disks === 1) {
-        // Single disk logic
-        $disk = $disk_array[0];
+} elseif ($num_of_disks === 1) {
+
+    $disk = $disk_array[0];
+
+    // Si el disco es el del sistema, usar la partición existente
+    if ($disk == "sda") {
+
+        $diskpart = "sda5";
+
+        exec("mkdir -p /volumes/$volume_name");
+
+        exec("mount /dev/$diskpart /volumes/$volume_name");
+
+        $uuid = exec("blkid -o value --match-tag UUID /dev/$diskpart");
+
+        $fstab_entry = "UUID=$uuid /volumes/$volume_name ext4 defaults 0 2\n";
+
+        file_put_contents("/etc/fstab", $fstab_entry, FILE_APPEND);
+
+    } else {
 
         exec("wipefs -a /dev/$disk");
         exec("(echo g; echo n; echo p; echo 1; echo; echo; echo w) | fdisk /dev/$disk");
 
         $diskpart = exec("lsblk -o PKNAME,KNAME,TYPE /dev/$disk | grep part | awk '{print \$2}'");
+
         exec("mdadm --zero-superblock /dev/$diskpart");
 
         exec("mkdir -p /volumes/$volume_name");
 
         exec("mkfs.btrfs -f -L $volume_name /dev/$diskpart");
+
         exec("mount /dev/$diskpart /volumes/$volume_name");
+
         $uuid = exec("blkid -o value --match-tag UUID /dev/$diskpart");
+
         $fstab_entry = "UUID=$uuid /volumes/$volume_name btrfs defaults 0 0\n";
+
         file_put_contents("/etc/fstab", $fstab_entry, FILE_APPEND);
     }
+}
 
     // Redirect after setup
     header("Location: setup_final.php");
